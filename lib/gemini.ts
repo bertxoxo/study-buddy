@@ -1,9 +1,13 @@
 import Groq from 'groq-sdk';
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+let groq: any;
+const getGroq = () => {
+  if (!groq) groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+  return groq;
+};
 
 async function ask(prompt: string): Promise<string> {
-  const res = await groq.chat.completions.create({
+  const res = await getGroq().chat.completions.create({
     model: 'llama-3.1-8b-instant',
     messages: [{ role: 'user', content: prompt }]
   });
