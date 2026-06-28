@@ -3,7 +3,11 @@ import { authenticateRequest } from '@/lib/auth';
 import { getAll, runQuery } from '@/lib/db';
 import Groq from 'groq-sdk';
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+let groq: any;
+const getGroq = () => {
+  if (!groq) groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+  return groq;
+};
 
 export async function POST(request: NextRequest) {
   try {
@@ -64,7 +68,7 @@ Return ONLY a valid JSON object like this:
 
 Only include days that have study sessions. Leave rest days as empty arrays.`;
 
-    const res = await groq.chat.completions.create({
+    const res = await getGroq().chat.completions.create({
       model: 'llama-3.1-8b-instant',
       messages: [{ role: 'user', content: prompt }]
     });
