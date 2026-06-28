@@ -1,0 +1,7 @@
+node_modules/
+.next/
+.env.local
+data/study-buddy.db
+public/uploads/
+*.log
+.DS_Store
