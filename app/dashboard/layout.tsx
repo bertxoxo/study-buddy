@@ -34,7 +34,7 @@ const navItems: NavItem[] = [
   { label: 'Progress', href: '/dashboard/progress', icon: TrendingUp },
   { label: 'Settings', href: '/dashboard/settings', icon: Settings },
 ];
-
+		
 export default function DashboardLayout({
   children,
 }: {
