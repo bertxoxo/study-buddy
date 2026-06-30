@@ -10,6 +10,8 @@ interface Flashcard {
   difficulty: string;
   course_name: string;
   times_reviewed: number;
+  next_review_date: string;
+  interval_days: number;
 }
 
 interface Document {
@@ -27,16 +29,18 @@ export default function FlashcardsPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [filter, setFilter] = useState('all');
+  const [dueOnly, setDueOnly] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [form, setForm] = useState({ document_id: '', count: '10' });
+  const [lastRating, setLastRating] = useState<{ interval: number } | null>(null);
 
-  useEffect(() => { fetchFlashcards(); }, [filter]);
+  useEffect(() => { fetchFlashcards(); }, [filter, dueOnly]);
 
   const fetchFlashcards = async () => {
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`/api/flashcards?difficulty=${filter}`, {
+      const res = await fetch(`/api/flashcards?difficulty=${filter}&due=${dueOnly}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) { router.push('/login'); return; }
@@ -44,6 +48,7 @@ export default function FlashcardsPage() {
       setFlashcards(data.flashcards);
       setCurrentIndex(0);
       setIsFlipped(false);
+      setLastRating(null);
     } catch (error) {
       console.error('Error fetching flashcards:', error);
     } finally {
@@ -92,6 +97,31 @@ export default function FlashcardsPage() {
     } catch { alert('Error deleting flashcard'); }
   };
 
+  const handleRate = async (rating: 'again' | 'hard' | 'good' | 'easy') => {
+    const card = flashcards[currentIndex];
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch(`/api/flashcards/${card.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ rating }),
+      });
+      const data = await res.json();
+      setLastRating({ interval: data.interval_days });
+      setTimeout(() => {
+        setLastRating(null);
+        if (currentIndex < flashcards.length - 1) {
+          setCurrentIndex(currentIndex + 1);
+          setIsFlipped(false);
+        } else {
+          fetchFlashcards();
+        }
+      }, 700);
+    } catch {
+      alert('Error rating flashcard');
+    }
+  };
+
   const openModal = () => { fetchDocuments(); setShowModal(true); };
   const currentCard = flashcards[currentIndex];
 
@@ -109,60 +139,107 @@ export default function FlashcardsPage() {
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <h1 className="text-4xl font-display font-bold text-neutral-900">Flashcards</h1>
-          <p className="text-neutral-600 mt-2">{flashcards.length} card{flashcards.length !== 1 ? 's' : ''}</p>
+          <p className="text-neutral-600 mt-2">{flashcards.length} card{flashcards.length !== 1 ? 's' : ''} {dueOnly ? 'due for review' : ''}</p>
         </div>
         <button onClick={openModal} className="button button-primary">
           <Plus className="w-5 h-5" /> Generate Flashcards
         </button>
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2 items-center">
         {['all', 'easy', 'medium', 'hard'].map(d => (
           <button key={d} onClick={() => setFilter(d)}
             className={`px-4 py-2 rounded-lg font-medium transition-colors capitalize ${filter === d ? 'bg-primary-600 text-white' : 'bg-neutral-200 text-neutral-900 hover:bg-neutral-300'}`}>
             {d}
           </button>
         ))}
+        <button onClick={() => setDueOnly(!dueOnly)}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors ${dueOnly ? 'bg-success-600 text-white' : 'bg-neutral-200 text-neutral-900 hover:bg-neutral-300'}`}>
+          {dueOnly ? '✓ Due Today Only' : 'Show Due Today Only'}
+        </button>
       </div>
 
       {flashcards.length > 0 && currentCard ? (
-        <div className="space-y-6">
+        <div className="space-y-6 max-w-2xl mx-auto">
           <div className="flex justify-between items-center">
             <p className="text-sm font-medium text-neutral-600">Card {currentIndex + 1} of {flashcards.length}</p>
-            <p className="text-sm text-neutral-600">Reviewed: {currentCard.times_reviewed} times</p>
+            <p className="text-sm text-neutral-600">
+              {currentCard.next_review_date ? `Next review: ${currentCard.next_review_date}` : 'New card'}
+            </p>
           </div>
           <div className="w-full bg-neutral-200 rounded-full h-2">
             <div className="bg-primary-600 h-2 rounded-full transition-all duration-300"
               style={{ width: `${((currentIndex + 1) / flashcards.length) * 100}%` }}></div>
           </div>
-          <div className="card cursor-pointer min-h-64 flex flex-col items-center justify-center relative"
-            onClick={() => setIsFlipped(!isFlipped)}>
-            <p className="text-sm font-medium text-neutral-500 mb-4">{isFlipped ? 'Answer' : 'Question'}</p>
-            <p className="text-2xl font-display font-bold text-neutral-900 text-center px-8">
-              {isFlipped ? currentCard.answer : currentCard.question}
-            </p>
-            <p className="absolute bottom-4 right-4 text-neutral-400 text-xs">Click to flip</p>
-            <span className={`absolute top-4 right-4 badge capitalize ${currentCard.difficulty === 'easy' ? 'badge-success' : currentCard.difficulty === 'medium' ? 'badge-warning' : 'badge-danger'}`}>
-              {currentCard.difficulty}
-            </span>
-          </div>
-          <div className="flex gap-3">
-            <button onClick={() => { setCurrentIndex(Math.max(0, currentIndex - 1)); setIsFlipped(false); }}
-              disabled={currentIndex === 0}
-              className="button button-secondary flex-1 disabled:opacity-50">Previous</button>
-            <button onClick={() => handleDelete(currentCard.id)} className="button button-danger">
-              <Trash2 className="w-4 h-4" />
-            </button>
-            <button onClick={() => { setCurrentIndex(Math.min(flashcards.length - 1, currentIndex + 1)); setIsFlipped(false); }}
-              disabled={currentIndex === flashcards.length - 1}
-              className="button button-secondary flex-1 disabled:opacity-50">Next</button>
-          </div>
+
+          {lastRating ? (
+            <div className="card min-h-64 flex flex-col items-center justify-center">
+              <div className="text-4xl mb-2">✓</div>
+              <p className="text-lg font-medium text-neutral-700">
+                Next review in {lastRating.interval} day{lastRating.interval !== 1 ? 's' : ''}
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="card cursor-pointer min-h-64 flex flex-col items-center justify-center relative"
+                onClick={() => setIsFlipped(!isFlipped)}>
+                <p className="text-sm font-medium text-neutral-500 mb-4">{isFlipped ? 'Answer' : 'Question'}</p>
+                <p className="text-2xl font-display font-bold text-neutral-900 text-center px-8">
+                  {isFlipped ? currentCard.answer : currentCard.question}
+                </p>
+                {!isFlipped && <p className="absolute bottom-4 right-4 text-neutral-400 text-xs">Click to reveal answer</p>}
+                <span className={`absolute top-4 right-4 badge capitalize ${currentCard.difficulty === 'easy' ? 'badge-success' : currentCard.difficulty === 'medium' ? 'badge-warning' : 'badge-danger'}`}>
+                  {currentCard.difficulty}
+                </span>
+              </div>
+
+              {isFlipped ? (
+                <div>
+                  <p className="text-center text-sm text-neutral-500 mb-3">How well did you know this?</p>
+                  <div className="grid grid-cols-4 gap-2">
+                    <button onClick={() => handleRate('again')}
+                      style={{ padding: '12px 8px', borderRadius: 8, background: '#fee2e2', color: '#991b1b', fontWeight: 600, border: 'none', cursor: 'pointer' }}>
+                      Again<br/><span style={{ fontSize: 11, fontWeight: 400 }}>forgot</span>
+                    </button>
+                    <button onClick={() => handleRate('hard')}
+                      style={{ padding: '12px 8px', borderRadius: 8, background: '#fef3c7', color: '#92400e', fontWeight: 600, border: 'none', cursor: 'pointer' }}>
+                      Hard<br/><span style={{ fontSize: 11, fontWeight: 400 }}>difficult</span>
+                    </button>
+                    <button onClick={() => handleRate('good')}
+                      style={{ padding: '12px 8px', borderRadius: 8, background: '#d1fae5', color: '#065f46', fontWeight: 600, border: 'none', cursor: 'pointer' }}>
+                      Good<br/><span style={{ fontSize: 11, fontWeight: 400 }}>recalled</span>
+                    </button>
+                    <button onClick={() => handleRate('easy')}
+                      style={{ padding: '12px 8px', borderRadius: 8, background: '#e0e9fe', color: '#3730a3', fontWeight: 600, border: 'none', cursor: 'pointer' }}>
+                      Easy<br/><span style={{ fontSize: 11, fontWeight: 400 }}>instant</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex gap-3">
+                  <button onClick={() => { setCurrentIndex(Math.max(0, currentIndex - 1)); setIsFlipped(false); }}
+                    disabled={currentIndex === 0}
+                    className="button button-secondary flex-1 disabled:opacity-50">Previous</button>
+                  <button onClick={() => handleDelete(currentCard.id)} className="button button-danger">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => setIsFlipped(true)} className="button button-primary flex-1">
+                    Show Answer
+                  </button>
+                </div>
+              )}
+            </>
+          )}
         </div>
       ) : (
         <div className="card text-center py-16">
           <BookMarked className="w-16 h-16 text-neutral-300 mx-auto mb-4" />
-          <h3 className="text-2xl font-display font-bold text-neutral-900 mb-2">No flashcards yet</h3>
-          <p className="text-neutral-600 mb-6">Generate flashcards from your study materials</p>
+          <h3 className="text-2xl font-display font-bold text-neutral-900 mb-2">
+            {dueOnly ? 'No cards due for review!' : 'No flashcards yet'}
+          </h3>
+          <p className="text-neutral-600 mb-6">
+            {dueOnly ? 'Great job staying on top of your reviews. Check back later.' : 'Generate flashcards from your study materials'}
+          </p>
           <button onClick={openModal} className="button button-primary mx-auto">
             <Plus className="w-5 h-5" /> Generate Flashcards
           </button>
