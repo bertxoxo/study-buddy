@@ -9,13 +9,15 @@ export async function getDB(): Promise<Database> {
     return db;
   }
 
-  const dbPath = path.join(process.cwd(), 'data', 'study-buddy.db');
-
-  db = await open({
-    filename: dbPath,
-    driver: sqlite3.Database,
-  });
-
+  const dataDir = path.join(process.cwd(), 'data');
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir, { recursive: true });
+}
+const dbPath = path.join(dataDir, 'study-buddy.db');
+db = await open({
+  filename: dbPath,
+  driver: sqlite3.Database,
+});
   await db.exec('PRAGMA foreign_keys = ON');
   return db;
 }
